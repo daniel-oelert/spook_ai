@@ -1,0 +1,3 @@
+# Toolsets
+
+Toolsets are collections of tools that can be used by the LLM agent. They are intended to make the agent only load tools into its context, that are relevant to the current task, to avoid context pollution, unnecessary token usage and to improve performance. They are defined in the `.spook/toolsets` directory. A toolset is a JSON file that contains a list of tools. A tool is a method on the `context.toolsets.<toolset_name>.<tool_name>(<args>)` object that can be called by the LLM agent. The `context.toolsets` object has a `list()` method that returns a list of names and descriptions of all available toolsets. Every toolset has a `info()` method that returns a tool function signatures and descriptions. 

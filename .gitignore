@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+out
+dist
+node_modules
+.vscode-test/
+*.vsix

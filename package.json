@@ -1,0 +1,76 @@
+{
+  "name": "spook",
+  "displayName": "Spook",
+  "description": "Case Officer handling AI agents",
+  "version": "0.0.1",
+  "type": "module",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "spook.session",
+        "title": "spook: Open the Spook session view"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "spook",
+          "title": "Spook",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "spook": [
+        {
+          "type": "webview",
+          "id": "spook.sessionManagementView",
+          "name": "Sessions",
+          "icon": "media/icon.svg",
+          "contextualTitle": "Session Management"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Spook-AI",
+      "properties": {}
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "build": "vite build && tsc --build",
+    "compile": "tsc --build",
+    "watch": "tsc --build --watch",
+    "pretest": "npm run build && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.107.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "concurrently": "^8.0.0",
+    "eslint": "^9.39.1",
+    "solid-js": "^1.9.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.1",
+    "vite": "^4.0.0",
+    "vite-plugin-solid": "^2.5.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@vscode/codicons": "^0.0.44",
+    "@vscode/sync-api-client": "^0.8.1",
+    "pyodide": "^0.29.3",
+    "vscode-uri": "^3.1.0"
+  }
+}
