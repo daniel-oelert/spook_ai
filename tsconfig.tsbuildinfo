@@ -1,1 +1,1 @@
-{"root":["./src/extension.ts","./src/fs.ts","./src/model.ts","./src/sessionManagementService.ts","./src/sessionManagementViewProvider.ts","./src/test/extension.test.ts"],"version":"5.9.3"}
+{"root":["./src/extension.ts","./src/fs.ts","./src/model.ts","./src/sessionManagementService.ts","./src/sessionManagementViewProvider.ts","./src/test/extension.test.ts","./src/test/fs.integration.test.ts","./src/test/fs.test.ts"],"version":"5.9.3"}
