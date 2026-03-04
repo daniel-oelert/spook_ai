@@ -6,3 +6,5 @@
 
 - CoW for files larger than RAM
 
+- CoW breakout protection
+    - symlinks?

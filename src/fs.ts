@@ -21,7 +21,7 @@ export interface CoWNode {
 const S_IFDIR = 0o40000;
 const S_IFREG = 0o100000;
 
-export function createCoWBackend(FS: any, apiClient: ApiClient, excludePatterns: RegExp[]) {
+export function createCoWBackend(FS: any, apiClient: ApiClient, excludePatterns: RegExp[], logFn?: (...args: any[]) => void) {
     const ERRORS = FS.genericErrors || { ENOENT: 44, EPERM: 1, EACCES: 2 };
 
     const copyUp = (node: CoWNode) => {
@@ -65,7 +65,9 @@ export function createCoWBackend(FS: any, apiClient: ApiClient, excludePatterns:
                     const statMode = (stat as any).mode || (stat.type === 1 ? S_IFREG | 0o666 : S_IFDIR | 0o777);
                     return this.createNode(parent, name, statMode, 0, stat);
                 } catch (e) {
-                    console.log("STAT CATCH:", e);
+                    if (logFn) {
+                        logFn("STAT CATCH:", e);
+                    }
                     throw new FS.ErrnoError(ERRORS.ENOENT);
                 }
             },
@@ -232,8 +234,11 @@ export function createCoWBackend(FS: any, apiClient: ApiClient, excludePatterns:
                     for (const [name] of lowerEntries) {
                         entries.add(name);
                     }
-                } catch {
+                } catch (e) {
                     // Ignore lower layer errors
+                    if (logFn) {
+                        logFn("READDIR CATCH:", e);
+                    }
                 }
 
                 // Upper layer entries

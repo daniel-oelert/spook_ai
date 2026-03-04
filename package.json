@@ -50,6 +50,7 @@
     "watch": "tsc --build --watch",
     "pretest": "npm run build && npm run lint",
     "lint": "eslint src",
+    "test:unit": "mocha 'out/test/*.unit.test.js' 'out/test/*.integration.test.js' --ui tdd",
     "test": "vscode-test"
   },
   "devDependencies": {

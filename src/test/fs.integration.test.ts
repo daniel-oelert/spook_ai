@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import { loadPyodide } from 'pyodide';
 import { createCoWBackend, getDirtyNodes } from '../fs.js';
 
-suite('CoW FS Integration Test (Headless)', () => {
+suite('CoW FS Pyodide Integration Test', () => {
     let pyodide: any;
     let mockApiClient: any;
     let mockLowerFs: Map<string, string | Uint8Array>;
@@ -67,9 +67,20 @@ suite('CoW FS Integration Test (Headless)', () => {
             }
         };
 
+        try {
+            pyodide.FS.mkdir('/cow');
+        } catch (e) {
+            // Already exists if Pyodide is reused across suites in a longer test run
+        }
+    });
+
+    setup(() => {
         const CoWFS = createCoWBackend(pyodide.FS, mockApiClient, []);
-        pyodide.FS.mkdir('/cow');
         pyodide.FS.mount(CoWFS, {}, '/cow');
+    });
+
+    teardown(() => {
+        pyodide.FS.unmount('/cow');
     });
 
     test('Python reads lower file', async () => {
@@ -148,6 +159,7 @@ suite('CoW FS Integration Test (Headless)', () => {
             import os
             with open('/cow/upper_file.txt', 'w') as f:
                 f.write('upper')
+            os.remove('/cow/file.txt')
             files = os.listdir('/cow')
         `);
         const files = pyodide.globals.get('files').toJs();
