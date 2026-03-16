@@ -6,7 +6,7 @@ Spook AI masks certain files to ease LLM token load and restrict security scope.
 - Path traversal outside workspace boundaries is stringently blocked via absolute/relative path boundary checks.
 
 ## 8.2 Safe Edits (Review and Diff)
-Since all changes live inside Pyodide's memory hierarchy (`MEMFS` overlay), developers invoke standard VS Code diff panels (comparing `vscode.workspace.fs` read files versus `MEMFS` cached files) before formally saving changes. 
+Since all changes live inside Pyodide's custom CoW hierarchy (as in-memory `CoWNode` objects), developers invoke standard VS Code diff panels (comparing `vscode.workspace.fs` read files versus the custom in-memory CoW cached files) before formally saving changes. 
 Whiteouts signify file deletions by the LLM, translating to UI visual indicators like a "Deleted" status tag.
 
 ## 8.3 State Persistence (JSON Sessions)

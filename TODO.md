@@ -8,3 +8,7 @@
 
 - CoW breakout protection
     - symlinks?
+
+- Research session key-value store
+    - JSON
+    - Pickle

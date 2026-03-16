@@ -8,7 +8,7 @@
 5. **Execution:** Code is run within Pyodide asynchronously. 
 6. **I/O Operations:** 
    - Operations like `os.listdir()` trigger `node_ops.readdir()`.
-   - File opens with `w` trigger a fetch from VSCode workspace, caching into `MEMFS` before the write.
+   - File opens with `w` trigger a fetch from VSCode workspace, caching into a custom `CoWNode` before the write.
 7. **Return:** Stdout/Stderr output is passed back to the LLM in a recursive loop until the LLM resolves the requirement or triggers `context.tools.ask()`.
 
 ## 6.2 Recursive Interaction

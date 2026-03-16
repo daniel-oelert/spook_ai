@@ -13,7 +13,7 @@ Python execution happens strictly within a Pyodide-based WebWorker to limit expo
 To provide the python REPL with visibility of the local workspace without allowing it to mutate files blindly:
 - A custom FS backend intercepts all Emscripten FS system calls.
 - The **lower layer** uses `@vscode/sync-api-client` to synchronously read files directly from the actual VS Code workspace.
-- The **upper layer** functions as a volatile Memory Filesystem (`MEMFS`). Any mutation (create, write, delete) triggers a copy-up mechanism or drops a "whiteout" marker, isolating changes until they are formally reviewed and applied by the user.
+- The **upper layer** functions as a custom in-memory node tree. Any mutation (create, write, delete) triggers a copy-up mechanism into a `CoWNode` object or drops a "whiteout" marker (a `Set` of deleted names), isolating changes until they are formally reviewed and applied by the user.
 
 ## 4.4 Session Persistence
 Sessions are purely file-backed representation stored natively as JSON blobs in `.spook/sessions` of the workspace. This inherently solves version control, sharing, branching, and debugging of LLM prompts.
