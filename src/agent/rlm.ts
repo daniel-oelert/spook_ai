@@ -183,10 +183,11 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
         }
 
         let fullContent = "";
-        let fullReasoning = "";
+        let webviewContent = "";
         let isThinking = false;
         let firstTokenTime: number | null = null;
         let tokensStats = "";
+        const messageId = Date.now().toString() + "-" + Math.random().toString(36).substring(2, 9);
 
         try {
             for await (const chunk of provider.chatStream(messages)) {
@@ -197,28 +198,39 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
                     if (!isThinking) {
                         isThinking = true;
                         outputChannel.append("\n<think>\n");
-                        fullReasoning += "<think>\n";
+                        webviewContent += "<think>\n";
                     }
                     outputChannel.append(chunk.text);
-                    fullReasoning += chunk.text;
+                    webviewContent += chunk.text;
                 } else if (chunk.type === 'content') {
                     if (isThinking) {
                         isThinking = false;
                         outputChannel.append("\n</think>\n");
-                        fullReasoning += "\n</think>\n";
+                        webviewContent += "\n</think>\n";
                     }
                     outputChannel.append(chunk.text);
                     fullContent += chunk.text;
+                    webviewContent += chunk.text;
                 } else if (chunk.type === 'usage') {
                     const elapsedSec = firstTokenTime ? (Date.now() - firstTokenTime) / 1000 : 0;
                     const tps = elapsedSec > 0 ? (chunk.usage.completionTokens / elapsedSec).toFixed(1) : "0.0";
                     tokensStats = `\n[Stats] Context Size: ${chunk.usage.promptTokens} tokens | Tokens Generated: ${chunk.usage.completionTokens} | Speed: ${tps} tok/s`;
                 }
+
+                if (config.postToWebview) {
+                    config.postToWebview({
+                        command: 'receiveMessage',
+                        role: 'assistant',
+                        content: webviewContent,
+                        isPartial: true,
+                        messageId: messageId
+                    });
+                }
             }
             if (isThinking) {
                 isThinking = false;
                 outputChannel.append("\n</think>\n");
-                fullReasoning += "\n</think>\n";
+                webviewContent += "\n</think>\n";
             }
             if (tokensStats) {
                 outputChannel.appendLine(tokensStats);
@@ -237,13 +249,7 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
                 agent: { id: 'rlm', name: 'RLM Agent', status: 'active', icon: '🤖' },
                 status: 'active'
             });
-            let replyContent = fullContent;
-            if (fullReasoning) {
-                // Prepend reasoning as an expandable section or just text.
-                // For now just appending text
-                replyContent = `*(Thought process)*\n\n${fullReasoning}\n\n---\n\n${fullContent}`;
-            }
-            config.postToWebview({ command: 'receiveMessage', role: 'assistant', content: replyContent });
+            config.postToWebview({ command: 'receiveMessage', role: 'assistant', content: webviewContent, isPartial: false, messageId });
         }
 
         // Extract Python Block strictly from actual content (ignore what it wrote in <think> tags)

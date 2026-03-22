@@ -39,6 +39,7 @@ export class SessionManagementService {
             {
                 localResourceRoots: [vscode.Uri.file(path.join(this._context.extensionPath, 'out', 'webview',))],
                 enableScripts: true, // Allow JS in the webview
+                retainContextWhenHidden: true // Keep context so tab switching does not clear state
             }
         );
 
@@ -90,7 +91,7 @@ export class SessionManagementService {
 
         const codiconsUri = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.css'));
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'out', 'webview', 'sessionPanel.js'));
-        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'out', 'webview', 'style.css'));
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'out', 'webview', 'sessionPanel.css'));
 
         return `<!DOCTYPE html>
         <html lang="en">

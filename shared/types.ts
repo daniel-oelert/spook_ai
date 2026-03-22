@@ -82,6 +82,8 @@ export interface ReceiveMessageMessage {
   content: string;
   role?: MessageRole;
   agentStatus?: AgentStatus;
+  isPartial?: boolean;
+  messageId?: string;
 }
 
 /** Agent status update message */

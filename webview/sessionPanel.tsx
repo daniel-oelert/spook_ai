@@ -1,6 +1,6 @@
 /* @refresh reload */
 import { render } from 'solid-js/web';
-import { createSignal, createEffect, onMount, For, Show } from 'solid-js';
+import { createSignal, createEffect, onMount, For, Show, Index } from 'solid-js';
 import { VsCodeApi } from './vscode';
 import './style.css'
 import type { Message, Agent, ExtensionToWebviewMessage } from '../shared/types';
@@ -12,6 +12,125 @@ import {
 
 declare const sessionId: string;
 
+function ThinkBlock(props: { content: string }) {
+  const [isCollapsed, setIsCollapsed] = createSignal(true);
+  return (
+    <div class="assistant-timeline-node think-node">
+      <div class="timeline-dot asterisk">✱</div>
+      <div class="timeline-content">
+        <div class="think-header" onClick={() => setIsCollapsed(!isCollapsed())}>
+          <span class="think-title">Thinking...</span>
+        </div>
+        <Show when={!isCollapsed()}>
+          <div class="text-block">{props.content}</div>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+function MessageRenderer(props: { content: string }) {
+  const blocks = () => {
+    const text = props.content;
+    const result: { type: 'text' | 'think'; content: string }[] = [];
+    const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = thinkRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        result.push({ type: 'text', content: text.slice(lastIndex, match.index).trim() });
+      }
+      result.push({ type: 'think', content: match[1].trim() });
+      lastIndex = thinkRegex.lastIndex;
+    }
+    if (lastIndex < text.length) {
+      const remaining = text.slice(lastIndex).trim();
+      if (remaining) {
+        result.push({ type: 'text', content: remaining });
+      }
+    }
+    return result;
+  };
+
+  const renderTextNodes = (content: string) => {
+    const lines = content.split('\n');
+    let currentBlock = '';
+    const output: { type: 'normal' | 'read' | 'write' | 'code'; text: string; subtext?: string }[] = [];
+
+    const flushBlock = () => {
+      if (currentBlock.trim()) {
+        output.push({ type: 'normal', text: currentBlock.trim() });
+        currentBlock = '';
+      }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.match(/^Read\s+`?.*?`?/)) {
+        flushBlock();
+        let subtext = '';
+        if (i + 1 < lines.length && lines[i + 1].trim().startsWith('L Read')) {
+          subtext = lines[i + 1].trim();
+          i++; // skip next line
+        }
+        output.push({ type: 'read', text: line, subtext });
+      } else if (line.match(/^Write\s*\(.*?\)/)) {
+        flushBlock();
+        let codeContent = '';
+        // If next line starts code block, grab it
+        if (i + 1 < lines.length && lines[i + 1].trim().startsWith('```')) {
+          i++;
+          const lang = lines[i].trim().replace('```', '');
+          let insideCode = '';
+          i++;
+          while (i < lines.length && !lines[i].trim().startsWith('```')) {
+            insideCode += lines[i] + '\n';
+            i++;
+          }
+          codeContent = insideCode.trim();
+        }
+        output.push({ type: 'write', text: line, subtext: codeContent });
+      } else {
+        currentBlock += (currentBlock ? '\n' : '') + line;
+      }
+    }
+    flushBlock();
+    return output;
+  };
+
+  return (
+    <div class="message-content-wrapper">
+      <Index each={blocks()}>
+        {(block) => (
+          block().type === 'think' ?
+            <ThinkBlock content={block().content} /> :
+            <div class="text-blocks">
+              <Index each={renderTextNodes(block().content)}>
+                {(node) => (
+                  <div class="assistant-timeline-node text-node">
+                    <div class={`timeline-dot ${(node().type === 'read' || node().type === 'write') ? 'green' : 'grey'}`}></div>
+                    <div class="timeline-content">
+                      <div class={node().type !== 'normal' ? 'action-text' : 'text-block'}>
+                        {node().text}
+                      </div>
+                      <Show when={node().type === 'read' && node().subtext}>
+                        <div class="action-subtext">{node().subtext}</div>
+                      </Show>
+                      <Show when={node().type === 'write' && node().subtext}>
+                        <div class="code-highlight">{node().subtext}</div>
+                      </Show>
+                    </div>
+                  </div>
+                )}
+              </Index>
+            </div>
+        )}
+      </Index>
+    </div>
+  );
+}
+
 function SessionPanel() {
   const [messages, setMessages] = createSignal<Message[]>([]);
   const [inputText, setInputText] = createSignal('');
@@ -19,9 +138,10 @@ function SessionPanel() {
   const [currentAgent, setCurrentAgent] = createSignal<Agent | null>(null);
   const [agents, setAgents] = createSignal<Agent[]>([
     { id: '1', name: 'Code Assistant', status: 'idle', icon: '🤖' },
-    { id: '2', name: 'Debugger', status: 'idle', icon: '🔍' },
   ]);
   const [messagesEndRef, setMessagesEndRef] = createSignal<HTMLDivElement | null>(null);
+
+  const isAgentWorking = () => isTyping() || agents().some(a => a.status === 'thinking' || a.status === 'active');
 
   // Auto-scroll to bottom when messages change
   createEffect(() => {
@@ -35,16 +155,42 @@ function SessionPanel() {
   onMount(() => {
     window.addEventListener('message', (event) => {
       const message = event.data as ExtensionToWebviewMessage;
-      
+
       if (isReceiveMessageMessage(message)) {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: message.role || 'assistant',
-          content: message.content,
-          timestamp: new Date(),
-          agentStatus: message.agentStatus
-        }]);
-        setIsTyping(false);
+        if (message.messageId) {
+          setMessages(prev => {
+            const existingIndex = prev.findIndex(m => m.id === message.messageId);
+            if (existingIndex >= 0) {
+              const newMessages = [...prev];
+              newMessages[existingIndex] = {
+                ...newMessages[existingIndex],
+                content: message.content,
+                agentStatus: message.agentStatus || newMessages[existingIndex].agentStatus
+              };
+              return newMessages;
+            } else {
+              return [...prev, {
+                id: message.messageId!,
+                role: message.role || 'assistant',
+                content: message.content,
+                timestamp: new Date(),
+                agentStatus: message.agentStatus
+              }];
+            }
+          });
+        } else {
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: message.role || 'assistant',
+            content: message.content,
+            timestamp: new Date(),
+            agentStatus: message.agentStatus
+          }]);
+        }
+
+        if (!message.isPartial) {
+          setIsTyping(false);
+        }
       } else if (isAgentStatusMessage(message)) {
         setCurrentAgent(message.agent);
         setIsTyping(message.agent.status === 'thinking' || message.agent.status === 'active');
@@ -79,104 +225,44 @@ function SessionPanel() {
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const getStatusIndicator = (status?: string) => {
-    switch (status) {
-      case 'thinking':
-        return <span class="status-indicator thinking">💭 Thinking</span>;
-      case 'processing':
-        return <span class="status-indicator processing">⚙️ Processing</span>;
-      case 'error':
-        return <span class="status-indicator error">❌ Error</span>;
-      default:
-        return null;
-    }
-  };
-
   return (
     <div class="chat-container">
       {/* Header */}
       <div class="chat-header">
         <div class="header-left">
-          <h2 class="chat-title">🤖 Agentic AI Chat</h2>
-          <Show when={currentAgent()}>
-            <span class="active-agent">
-              {currentAgent()?.icon} {currentAgent()?.name}
-            </span>
-          </Show>
+          <h2 class="chat-title">
+            Unit Tests <span class="chevron">⌄</span>
+          </h2>
         </div>
         <div class="header-actions">
+          <button class="icon-button" title="New Chat">
+            <svg viewBox="0 0 16 16"><path d="M11.5 2h-7C3.67 2 3 2.67 3 3.5v7c0 .83.67 1.5 1.5 1.5h2v2.5L9.5 12h2c.83 0 1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-3 5h-1v1h-1V7h-1V6h1V5h1v1h1v1h-1z" /></svg>
+          </button>
           <button
             class="icon-button"
             onClick={() => VsCodeApi.postMessage({ command: 'clearChat' })}
             title="Clear chat"
           >
-            🗑️
+            <svg viewBox="0 0 16 16"><path d="M12 4.7L11.3 4 8 7.3 4.7 4 4 4.7 7.3 8 4 11.3 4.7 12 8 8.7 11.3 12 12 11.3 8.7 8 12 4.7z" /></svg>
           </button>
         </div>
       </div>
 
-      {/* Agent Status Bar */}
-      <Show when={agents().length > 0}>
-        <div class="agent-status-bar">
-          <For each={agents()}>
-            {(agent) => (
-              <div class={`agent-badge ${agent.status}`}>
-                <span class="agent-icon">{agent.icon}</span>
-                <span class="agent-name">{agent.name}</span>
-                <span class={`agent-status-dot ${agent.status}`}></span>
-              </div>
-            )}
-          </For>
-        </div>
-      </Show>
-
       {/* Messages Area */}
       <div class="messages-container">
-        <Show when={messages().length === 0}>
-          <div class="empty-state">
-            <div class="empty-icon">💬</div>
-            <h3>Start a conversation in session {sessionId}</h3>
-            <p>Ask me anything about your code, debugging, or development tasks.</p>
-            <div class="suggestion-chips">
-              <button
-                class="suggestion-chip"
-                onClick={() => setInputText("Explain this code")}
-              >
-                Explain this code
-              </button>
-              <button
-                class="suggestion-chip"
-                onClick={() => setInputText("Find and fix bugs")}
-              >
-                Find and fix bugs
-              </button>
-              <button
-                class="suggestion-chip"
-                onClick={() => setInputText("Refactor this function")}
-              >
-                Refactor this function
-              </button>
-            </div>
-          </div>
-        </Show>
-
         <For each={messages()}>
           {(message) => (
             <div class={`message ${message.role}`}>
-              <div class="message-header">
-                <span class="message-role">
-                  {message.role === 'user' ? '👤 You' : '🤖 Assistant'}
-                </span>
-                <span class="message-time">{formatTime(message.timestamp)}</span>
-              </div>
-              <div class="message-content">
-                {message.content}
-              </div>
-              {getStatusIndicator(message.agentStatus)}
+              <Show when={message.role === 'user'}>
+                <div class="user-message-box">
+                  {message.content}
+                </div>
+              </Show>
+              <Show when={message.role === 'assistant'}>
+                <div class="assistant-message-wrapper">
+                  <MessageRenderer content={message.content} />
+                </div>
+              </Show>
             </div>
           )}
         </For>
@@ -184,10 +270,11 @@ function SessionPanel() {
         {/* Typing Indicator */}
         <Show when={isTyping()}>
           <div class="message assistant typing">
-            <div class="typing-indicator">
-              <span></span>
-              <span></span>
-              <span></span>
+            <div class="assistant-timeline-node pondering">
+              <div class="timeline-dot asterisk">✱</div>
+              <div class="timeline-content">
+                <span class="text-block">Thinking...</span>
+              </div>
             </div>
           </div>
         </Show>
@@ -197,22 +284,40 @@ function SessionPanel() {
 
       {/* Input Area */}
       <div class="input-container">
-        <textarea
-          class="message-input"
-          placeholder="Type your message... (Shift+Enter for new line)"
-          value={inputText()}
-          onInput={(e) => setInputText(e.currentTarget.value)}
-          onKeyDown={handleKeyPress}
-          rows={1}
-        />
-        <button
-          class="send-button"
-          onClick={handleSendMessage}
-          disabled={!inputText().trim()}
-          title="Send message"
-        >
-          <span class="send-icon">➤</span>
-        </button>
+        <div class="input-wrapper">
+          <textarea
+            class="message-input"
+            placeholder={isAgentWorking() ? "Agent is working..." : "Queue another message..."}
+            value={inputText()}
+            disabled={isAgentWorking()}
+            onInput={(e) => setInputText(e.currentTarget.value)}
+            onKeyDown={handleKeyPress}
+            rows={1}
+          />
+          <div class="input-actions">
+            <div class="input-actions-left">
+              <span class="input-action-pill">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M11 2.5C11 1.12 9.88 0 8.5 0S6 1.12 6 2.5v7.08c0 1.05.85 1.91 1.9 1.92h.1c1.05 0 1.9-.85 1.9-1.92V4.4h-1v5.18c0 .5-.45.92-.95.92-.5 0-.95-.42-.95-.92V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11H12V2.5z" /></svg>
+                Ask before editing
+              </span>
+              <span class="input-action-pill">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M11 2.5C11 1.12 9.88 0 8.5 0S6 1.12 6 2.5v7.08c0 1.05.85 1.91 1.9 1.92h.1c1.05 0 1.9-.85 1.9-1.92V4.4h-1v5.18c0 .5-.45.92-.95.92-.5 0-.95-.42-.95-.92V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11H12V2.5z" /></svg>
+                localizationUtils.ts
+              </span>
+            </div>
+            <div class="input-actions-right">
+              <span class="input-slash">/</span>
+              <button
+                class="submit-btn"
+                onClick={handleSendMessage}
+                disabled={!inputText().trim() || isAgentWorking()}
+                title="Send message"
+              >
+                <div class="submit-icon"></div>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
