@@ -15,7 +15,7 @@
 				"kind": "build",
 				"isDefault": true
 			},
-			"path": "spook_ai_vscode"
+			"path": "."
 		}
 	]
 }

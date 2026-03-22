@@ -16,6 +16,10 @@
       {
         "command": "spook.session",
         "title": "spook: Open the Spook session view"
+      },
+      {
+        "command": "spook.testRLM",
+        "title": "spook: Test RLM"
       }
     ],
     "viewsContainers": {
@@ -40,7 +44,25 @@
     },
     "configuration": {
       "title": "Spook-AI",
-      "properties": {}
+      "properties": {
+        "spook.excludeDirectories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "node_modules",
+            ".git",
+            "dist",
+            "out",
+            "build",
+            ".vscode",
+            ".pytest_cache",
+            "__pycache__"
+          ],
+          "description": "Directories to exclude from the CoW filesystem."
+        }
+      }
     }
   },
   "scripts": {
@@ -71,6 +93,7 @@
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@vscode/codicons": "^0.0.44",
     "@vscode/sync-api-client": "^0.8.1",
+    "openai": "^6.29.0",
     "pyodide": "^0.29.3",
     "vscode-uri": "^3.1.0"
   }

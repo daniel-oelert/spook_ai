@@ -46,6 +46,22 @@ export interface SessionTree {
   roots: SessionTreeNode[];
 }
 
+/** A message in a persisted session */
+export interface SessionMessage {
+  role: MessageRole;
+  content: string;
+  store?: Record<string, any>;
+}
+
+/** Data structure for a persisted session */
+export interface SessionData {
+  name: string;
+  short_name: string;
+  description: string;
+  created_at: string;
+  messages: SessionMessage[];
+}
+
 // =============================================================================
 // Extension -> Webview Messages
 // =============================================================================

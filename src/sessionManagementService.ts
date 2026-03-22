@@ -2,16 +2,35 @@ import path from 'path';
 import * as vscode from 'vscode';
 import { SessionTree } from '../shared/index.js';
 
+import { SessionStore } from './session/sessionStore.js';
+
 export class SessionManagementService {
 
     private sessionPanelMap = new Map<string, { panel: vscode.WebviewPanel }>();
     private onSessionTreeChangeCallback?: () => void;
+    private sessionStore: SessionStore | null = null;
 
-    constructor(private readonly _context: vscode.ExtensionContext) { }
+    constructor(private readonly _context: vscode.ExtensionContext) {
+        const rootPath = vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (rootPath) {
+            this.sessionStore = new SessionStore(rootPath);
+        }
+    }
 
     public async newSession(): Promise<void> {
+        if (!this.sessionStore) {
+            vscode.window.showErrorMessage('No workspace folder open for session storage.');
+            return;
+        }
 
-        var newSessionId = "1";
+        const newSessionId = `session_${Date.now()}`;
+        await this.sessionStore.saveSession(newSessionId, {
+            name: `New Session`,
+            short_name: newSessionId,
+            description: "A newly created session.",
+            created_at: new Date().toISOString(),
+            messages: []
+        });
 
         const panel = vscode.window.createWebviewPanel(
             `sessionPanel_${newSessionId}`, // Internal ID
@@ -37,7 +56,15 @@ export class SessionManagementService {
     }
 
     public async getSessionTree(): Promise<SessionTree> {
-        return { roots: [] };
+        if (!this.sessionStore) {
+            return { roots: [] };
+        }
+        const sessions = await this.sessionStore.getSessions();
+        const roots = sessions.map(s => ({
+            sessionId: s.id,
+            name: s.name
+        }));
+        return { roots };
     }
 
     public setOnSessionTreeChangeCallback(callback: () => void): void {
