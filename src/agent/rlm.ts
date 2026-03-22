@@ -7,6 +7,7 @@ export interface RLMConfig {
     provider: LLMProvider;
     outputChannel: vscode.OutputChannel;
     apiClient?: any; // the SyncApiClient used by the CoW FS
+    postToWebview?: (msg: any) => void;
 }
 
 const SYSTEM_PROMPT = `
@@ -131,6 +132,10 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
     outputChannel.appendLine(`Prompt: ${prompt}`);
     outputChannel.appendLine("===========================================\n");
 
+    if (config.postToWebview) {
+        config.postToWebview({ command: 'receiveMessage', role: 'user', content: prompt });
+    }
+
     const messages: LLMMessage[] = [
         { role: 'system', content: SYSTEM_PROMPT },
         {
@@ -168,6 +173,14 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
         turnCount++;
         outputChannel.appendLine(`\n--- Turn ${turnCount} ---`);
         outputChannel.appendLine("[Agent is thinking...]");
+
+        if (config.postToWebview) {
+            config.postToWebview({
+                command: 'agentStatus',
+                agent: { id: 'rlm', name: 'RLM Agent', status: 'thinking', icon: '🤖' },
+                status: 'thinking'
+            });
+        }
 
         let fullContent = "";
         let fullReasoning = "";
@@ -218,6 +231,21 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
         outputChannel.appendLine("\n");
         messages.push({ role: 'assistant', content: fullContent });
 
+        if (config.postToWebview) {
+            config.postToWebview({
+                command: 'agentStatus',
+                agent: { id: 'rlm', name: 'RLM Agent', status: 'active', icon: '🤖' },
+                status: 'active'
+            });
+            let replyContent = fullContent;
+            if (fullReasoning) {
+                // Prepend reasoning as an expandable section or just text.
+                // For now just appending text
+                replyContent = `*(Thought process)*\n\n${fullReasoning}\n\n---\n\n${fullContent}`;
+            }
+            config.postToWebview({ command: 'receiveMessage', role: 'assistant', content: replyContent });
+        }
+
         // Extract Python Block strictly from actual content (ignore what it wrote in <think> tags)
         const pythonMatch = fullContent.match(/```repl\n([\s\S]*?)```/);
 
@@ -236,19 +264,38 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
                 const combinedOutput = `STDOUT:\n${stdout}\nSTDERR:\n${stderr}`;
                 outputChannel.appendLine(`[Execution Result]:\n${combinedOutput}`);
                 messages.push({ role: 'user', content: `Execution Output:\n${combinedOutput}` });
+
+                if (config.postToWebview) {
+                    config.postToWebview({ command: 'receiveMessage', role: 'system', content: `[Execution Result]:\n${combinedOutput}` });
+                }
             } catch (err: any) {
                 const combinedOutput = `STDOUT:\n${stdout}\nSTDERR:\n${stderr}\nEXCEPTION:\n${err.message}`;
                 outputChannel.appendLine(`[Execution Exception]:\n${combinedOutput}`);
                 messages.push({ role: 'user', content: `Execution Exception:\n${combinedOutput}` });
+
+                if (config.postToWebview) {
+                    config.postToWebview({ command: 'receiveMessage', role: 'system', content: `[Execution Exception]:\n${combinedOutput}` });
+                }
             }
         } else {
             // No python block means the LLM believes it is done
             outputChannel.appendLine("[System] No Python code block found. Session Complete.");
+            if (config.postToWebview) {
+                config.postToWebview({
+                    command: 'agentStatus',
+                    agent: { id: 'rlm', name: 'RLM Agent', status: 'idle', icon: '🤖' },
+                    status: 'idle'
+                });
+                config.postToWebview({ command: 'receiveMessage', role: 'system', content: `[System] Session Complete.` });
+            }
             isDone = true;
         }
     }
 
     if (turnCount >= 10) {
         outputChannel.appendLine("[System] Session hit maximum turns limit!");
+        if (config.postToWebview) {
+            config.postToWebview({ command: 'receiveMessage', role: 'system', content: `[System] Session hit maximum turns limit!` });
+        }
     }
 }

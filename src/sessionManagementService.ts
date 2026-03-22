@@ -17,10 +17,10 @@ export class SessionManagementService {
         }
     }
 
-    public async newSession(): Promise<void> {
+    public async newSession(): Promise<string | undefined> {
         if (!this.sessionStore) {
             vscode.window.showErrorMessage('No workspace folder open for session storage.');
-            return;
+            return undefined;
         }
 
         const newSessionId = `session_${Date.now()}`;
@@ -53,6 +53,15 @@ export class SessionManagementService {
         });
 
         this.notifySessionTreeChange();
+
+        return newSessionId;
+    }
+
+    public postMessageToSession(sessionId: string, message: any): void {
+        const session = this.sessionPanelMap.get(sessionId);
+        if (session) {
+            session.panel.webview.postMessage(message);
+        }
     }
 
     public async getSessionTree(): Promise<SessionTree> {

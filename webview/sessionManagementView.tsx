@@ -1,12 +1,8 @@
 /* @refresh reload */
 import { render } from 'solid-js/web';
-import { createSignal, onMount, For  } from 'solid-js';
+import { createSignal, onMount, For } from 'solid-js';
 import { VsCodeApi } from './vscode';
 import type { SessionTree, SessionTreeNode, ExtensionToWebviewMessage } from '../shared/types';
-
-function handleClick(){
-  VsCodeApi.postMessage({ command: 'newSession', text: "example-session-title" });
-}
 
 function SessionTreeNodeComponent(props: { node: SessionTreeNode }) {
   return (
@@ -27,9 +23,15 @@ function SessionTreeNodeComponent(props: { node: SessionTreeNode }) {
 
 function SessionManagementView() {
   const [sessionTree, setSessionTree] = createSignal<SessionTree | null>(null);
+  const [prompt, setPrompt] = createSignal('');
 
   const requestSessionTree = () => {
     VsCodeApi.postMessage({ command: 'requestSessionTree' });
+  };
+
+  const handleStartSession = () => {
+    VsCodeApi.postMessage({ command: 'newSession', text: prompt() || "example-session-title" });
+    setPrompt('');
   };
 
   onMount(() => {
@@ -39,7 +41,7 @@ function SessionManagementView() {
     // Listen for messages from extension
     window.addEventListener('message', (event) => {
       const message = event.data as ExtensionToWebviewMessage;
-      
+
       switch (message.command) {
         case 'sessionTree':
           setSessionTree(message.tree);
@@ -50,19 +52,27 @@ function SessionManagementView() {
 
   return (
     <div style="padding: 20px; color: white;">
-      <button 
-        onClick={handleClick}
-        style="background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 5px 10px; cursor: pointer;"
-      >
-        +
-      </button>
-      
-      <button 
-        onClick={requestSessionTree}
-        style="background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 5px 10px; cursor: pointer; margin-left: 8px;"
-      >
-        Refresh
-      </button>
+      <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+        <input
+          type="text"
+          value={prompt()}
+          onInput={(e) => setPrompt(e.currentTarget.value)}
+          placeholder="Enter a task for the Agent"
+          style="flex: 1; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); padding: 5px; border-radius: 2px;"
+        />
+        <button
+          onClick={handleStartSession}
+          style="background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 5px 10px; cursor: pointer; border-radius: 2px;"
+        >
+          Run RLM
+        </button>
+        <button
+          onClick={requestSessionTree}
+          style="background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 5px 10px; cursor: pointer; border-radius: 2px;"
+        >
+          Refresh
+        </button>
+      </div>
 
       <div style="margin-top: 16px;">
         <h3 style="color: var(--vscode-foreground); margin-bottom: 8px;">Sessions</h3>

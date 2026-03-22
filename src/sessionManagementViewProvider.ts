@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { SessionManagementService } from "./sessionManagementService.js";
 import type { WebviewToExtensionMessage } from './model.js';
+import { runRudimentaryRLMSession } from './agent/rlm.js';
+import { OpenAIProvider } from './llm/providers/openai.js';
 
 export class SessionManagementViewProvider implements vscode.WebviewViewProvider {
 
@@ -33,9 +35,39 @@ export class SessionManagementViewProvider implements vscode.WebviewViewProvider
             switch (message.command) {
                 case 'newSession': {
                     const query = String(message.text || '');
-                    this.logger.info('Creating new session' + query);
-                    this.sessionManagementService.newSession();
-                    // webviewView.webview.postMessage({ command: 'serverStatus', status: s.status, metadata: { port: s.port, pid: s.pid } });
+                    this.logger.info('Creating new RLM session for query: ' + query);
+
+                    // Call the SessionManagementService and create the chat panel (optional context for later)
+                    const sessionId = await this.sessionManagementService.newSession();
+
+                    // Retrieve an API key
+                    const apiKey = await vscode.window.showInputBox({
+                        prompt: "Enter OpenAI API Key for the RLM session",
+                        ignoreFocusOut: true,
+                        password: true
+                    });
+
+                    if (apiKey) {
+                        const provider = new OpenAIProvider({
+                            baseUrl: "http://192.168.2.210:8000/v1",
+                            apiKey,
+                            model: "nemotron_cascade_2_30b_a3b"
+                        });
+
+                        const outputChannel = vscode.window.createOutputChannel(`Spook RLM: ${query.substring(0, 10)}...`);
+                        outputChannel.show(true);
+
+                        runRudimentaryRLMSession(query, {
+                            provider,
+                            outputChannel,
+                            postToWebview: (msg: any) => {
+                                if (sessionId) {
+                                    this.sessionManagementService.postMessageToSession(sessionId, msg);
+                                }
+                            }
+                        });
+                    }
+
                     break;
                 }
 
