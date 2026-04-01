@@ -16,7 +16,7 @@ function ThinkBlock(props: { content: string }) {
   const [isCollapsed, setIsCollapsed] = createSignal(true);
   return (
     <div class="assistant-timeline-node think-node">
-      <div class="timeline-dot asterisk">✱</div>
+      <div class="timeline-dot"></div>
       <div class="timeline-content">
         <div class="think-header" onClick={() => setIsCollapsed(!isCollapsed())}>
           <span class="think-title">Thinking...</span>
@@ -238,13 +238,6 @@ function SessionPanel() {
           <button class="icon-button" title="New Chat">
             <svg viewBox="0 0 16 16"><path d="M11.5 2h-7C3.67 2 3 2.67 3 3.5v7c0 .83.67 1.5 1.5 1.5h2v2.5L9.5 12h2c.83 0 1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-3 5h-1v1h-1V7h-1V6h1V5h1v1h1v1h-1z" /></svg>
           </button>
-          <button
-            class="icon-button"
-            onClick={() => VsCodeApi.postMessage({ command: 'clearChat' })}
-            title="Clear chat"
-          >
-            <svg viewBox="0 0 16 16"><path d="M12 4.7L11.3 4 8 7.3 4.7 4 4 4.7 7.3 8 4 11.3 4.7 12 8 8.7 11.3 12 12 11.3 8.7 8 12 4.7z" /></svg>
-          </button>
         </div>
       </div>
 
@@ -271,7 +264,7 @@ function SessionPanel() {
         <Show when={isTyping()}>
           <div class="message assistant typing">
             <div class="assistant-timeline-node pondering">
-              <div class="timeline-dot asterisk">✱</div>
+              <div class="timeline-dot"></div>
               <div class="timeline-content">
                 <span class="text-block">Thinking...</span>
               </div>

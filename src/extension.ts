@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import { SessionManagementViewProvider } from './sessionManagementViewProvider.js';
 import { SessionManagementService } from './sessionManagementService.js';
-import { runRudimentaryRLMSession } from './agent/rlm.js';
+import { createRLMSession } from './agent/rlm.js';
 import { OpenAIProvider } from './llm/providers/openai.js';
 import { Server } from 'http';
 
@@ -39,10 +39,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const testRLMDisposable = vscode.commands.registerCommand('spook.testRLM', async () => {
         const apiKey = await vscode.window.showInputBox({ prompt: "Enter OpenAI API Key", ignoreFocusOut: true, password: true });
-        if (!apiKey) {return;}
+        if (!apiKey) { return; }
 
         const prompt = await vscode.window.showInputBox({ prompt: "Enter a task for the Agent", ignoreFocusOut: true });
-        if (!prompt) {return;}
+        if (!prompt) { return; }
 
         const provider = new OpenAIProvider({
             baseUrl: "http://192.168.2.210:8000/v1",
@@ -53,7 +53,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const outputChannel = vscode.window.createOutputChannel("Spook RLM Test");
         outputChannel.show(true);
 
-        runRudimentaryRLMSession(prompt, {
+        createRLMSession(prompt, {
             provider,
             outputChannel
         });

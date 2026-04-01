@@ -97,7 +97,7 @@ if "USE_LEMMA" in r.upper():
     final_answer = query("Prove 'n^2 even => n even' then use it to show sqrt 2 irrational. Two sentences.")
 \`\`\`
 
-IMPORTANT: When you are done with the iterative process, you MUST provide a final answer inside a \`handoff\` or \`handoff_var\` function when you have completed your task in a repl block. Do not use these tags unless you have completed your task. You have two options:
+IMPORTANT: When you are done with the iterative process, you MUST provide a final answer inside a \`handoff\` or \`handoff_var\` function when you have completed your task in a repl block. Do not use these functions unless you have completed your task. You have two options:
 1. Use handoff("your final answer here") to provide the answer directly
 2. Use handoff_var(variable_name) to return a variable you have created in the REPL environment as your final output
 
@@ -124,7 +124,7 @@ Think step by step carefully, plan, and execute this plan immediately in your re
 // 4. Stop outputting Python blocks once you believe the task is fully complete. If you output a Python block, the system will assume you need to run it and wait for the output.
 // `;
 
-export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig) {
+export async function createRLMSession(prompt: string, config: RLMConfig) {
     const { provider, outputChannel, apiClient } = config;
 
     outputChannel.appendLine("===========================================");
@@ -141,7 +141,7 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
         {
             role: 'assistant', content: `
             \`\`\`repl
-            print(context)${prompt}
+            print(context)
             \`\`\`
             ` },
         {
@@ -152,9 +152,32 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
     outputChannel.appendLine("[System] Initializing Pyodide Sandbox...");
     const pyodide = await loadPyodide();
 
+    await pyodide.runPythonAsync(`
+_handoff_result = None
+_handoff_called = False
+
+def handoff(result):
+    global _handoff_result, _handoff_called
+    _handoff_result = str(result)
+    _handoff_called = True
+    raise Exception("__HANDOFF__")
+
+def handoff_var(var_value):
+    global _handoff_result, _handoff_called
+    _handoff_result = str(var_value)
+    _handoff_called = True
+    raise Exception("__HANDOFF__")
+
+def SHOW_VARS():
+    import __main__
+    ignore = {'handoff', 'handoff_var', 'SHOW_VARS', 'query'}
+    return [k for k in dir(__main__) if not k.startswith('_') and k not in ignore]
+`);
+
     if (apiClient) {
         outputChannel.appendLine("[System] Mounting CoW Filesystem...");
 
+        // TODO: Improve globbing notation
         const config = vscode.workspace.getConfiguration('spook');
         const excludeDirs = config.get<string[]>('excludeDirectories') || [];
         const excludePatterns = excludeDirs.map(dir => new RegExp(`(?:^|/)${dir}(?:/|$)`));
@@ -275,13 +298,31 @@ export async function runRudimentaryRLMSession(prompt: string, config: RLMConfig
                     config.postToWebview({ command: 'receiveMessage', role: 'system', content: `[Execution Result]:\n${combinedOutput}` });
                 }
             } catch (err: any) {
-                const combinedOutput = `STDOUT:\n${stdout}\nSTDERR:\n${stderr}\nEXCEPTION:\n${err.message}`;
-                outputChannel.appendLine(`[Execution Exception]:\n${combinedOutput}`);
-                messages.push({ role: 'user', content: `Execution Exception:\n${combinedOutput}` });
+                const isHandoff = err.message && err.message.includes("__HANDOFF__");
+                if (!isHandoff) {
+                    const combinedOutput = `STDOUT:\n${stdout}\nSTDERR:\n${stderr}\nEXCEPTION:\n${err.message}`;
+                    outputChannel.appendLine(`[Execution Exception]:\n${combinedOutput}`);
+                    messages.push({ role: 'user', content: `Execution Exception:\n${combinedOutput}` });
 
-                if (config.postToWebview) {
-                    config.postToWebview({ command: 'receiveMessage', role: 'system', content: `[Execution Exception]:\n${combinedOutput}` });
+                    if (config.postToWebview) {
+                        config.postToWebview({ command: 'receiveMessage', role: 'system', content: `[Execution Exception]:\n${combinedOutput}` });
+                    }
                 }
+            }
+
+            const handoffCalled = pyodide.globals.get('_handoff_called');
+            if (handoffCalled) {
+                const handoffResult = pyodide.globals.get('_handoff_result');
+                outputChannel.appendLine(`[System] Handoff received:\n${handoffResult}`);
+                if (config.postToWebview) {
+                    config.postToWebview({ command: 'receiveMessage', role: 'system', content: `**Final Answer**:\n${handoffResult}` });
+                    config.postToWebview({
+                        command: 'agentStatus',
+                        agent: { id: 'rlm', name: 'RLM Agent', status: 'idle', icon: '🤖' },
+                        status: 'idle'
+                    });
+                }
+                isDone = true;
             }
         } else {
             // No python block means the LLM believes it is done

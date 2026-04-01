@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { SessionManagementService } from "./sessionManagementService.js";
 import type { WebviewToExtensionMessage } from './model.js';
-import { runRudimentaryRLMSession } from './agent/rlm.js';
+import { createRLMSession } from './agent/rlm.js';
 import { OpenAIProvider } from './llm/providers/openai.js';
 
 export class SessionManagementViewProvider implements vscode.WebviewViewProvider {
@@ -57,7 +57,7 @@ export class SessionManagementViewProvider implements vscode.WebviewViewProvider
                         const outputChannel = vscode.window.createOutputChannel(`Spook RLM: ${query.substring(0, 10)}...`);
                         outputChannel.show(true);
 
-                        runRudimentaryRLMSession(query, {
+                        createRLMSession(query, {
                             provider,
                             outputChannel,
                             postToWebview: (msg: any) => {
