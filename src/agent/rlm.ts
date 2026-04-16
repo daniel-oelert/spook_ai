@@ -10,6 +10,45 @@ export interface RLMConfig {
     postToWebview?: (msg: any) => void;
 }
 
+/** Error thrown when Python execution exceeds the configured timeout. */
+class PythonTimeoutError extends Error {
+    constructor(public readonly timeoutSeconds: number) {
+        super(`Python execution timed out after ${timeoutSeconds}s`);
+        this.name = 'PythonTimeoutError';
+    }
+}
+
+/**
+ * Runs Python code in Pyodide with a configurable timeout.
+ * Uses Promise.race to abort long-running code (e.g. infinite loops)
+ * and returns a fresh Pyodide instance when a timeout occurs so the
+ * session can continue on the next turn.
+ */
+async function runPythonWithTimeout(
+    pyodide: any,
+    pythonCode: string,
+    timeoutMs: number
+): Promise<{ pyodide: any; timedOut: boolean }> {
+    const execution = pyodide.runPythonAsync(pythonCode);
+
+    let settled = false;
+    const timeout = new Promise<'timeout'>((resolve) => {
+        setTimeout(() => {
+            if (!settled) resolve('timeout');
+        }, timeoutMs);
+    });
+
+    const result = await Promise.race([execution.then(() => ({ timedOut: false })), timeout]);
+
+    settled = true;
+
+    if (result === 'timeout') {
+        return { pyodide, timedOut: true };
+    }
+
+    return { pyodide, timedOut: false };
+}
+
 const SYSTEM_PROMPT = `
 You are tasked with answering a query with associated context. You can access, transform, and analyze this context interactively in a REPL environment that can recursively query sub-LLMs, which you are strongly encouraged to use as much as possible. You will be queried iteratively until you provide a final answer.
 
@@ -150,9 +189,15 @@ export async function createRLMSession(prompt: string, config: RLMConfig) {
     ];
 
     outputChannel.appendLine("[System] Initializing Pyodide Sandbox...");
-    const pyodide = await loadPyodide();
+    let pyodide = await loadPyodide();
 
-    await pyodide.runPythonAsync(`
+    const spookConfig = vscode.workspace.getConfiguration('spook');
+    const pythonTimeoutSec = spookConfig.get<number>('pythonExecutionTimeout') ?? 30;
+    const pythonTimeoutMs = pythonTimeoutSec * 1000;
+
+    // Reusable: re-injects handoff/SHOW_VARS helpers into a fresh Pyodide instance.
+    const bootstrapPyodide = async (py: any) => {
+        await py.runPythonAsync(`
 _handoff_result = None
 _handoff_called = False
 
@@ -173,6 +218,9 @@ def SHOW_VARS():
     ignore = {'handoff', 'handoff_var', 'SHOW_VARS', 'query'}
     return [k for k in dir(__main__) if not k.startswith('_') and k not in ignore]
 `);
+    };
+
+    await bootstrapPyodide(pyodide);
 
     if (apiClient) {
         outputChannel.appendLine("[System] Mounting CoW Filesystem...");
@@ -289,13 +337,40 @@ def SHOW_VARS():
             pyodide.setStderr({ batched: (msg: string) => { stderr += msg + "\\n"; } });
 
             try {
-                await pyodide.runPythonAsync(pythonCode);
-                const combinedOutput = `STDOUT:\n${stdout}\nSTDERR:\n${stderr}`;
-                outputChannel.appendLine(`[Execution Result]:\n${combinedOutput}`);
-                messages.push({ role: 'user', content: `Execution Output:\n${combinedOutput}` });
+                const { timedOut } = await runPythonWithTimeout(pyodide, pythonCode, pythonTimeoutMs);
 
-                if (config.postToWebview) {
-                    config.postToWebview({ command: 'receiveMessage', role: 'system', content: `[Execution Result]:\n${combinedOutput}` });
+                if (timedOut) {
+                    outputChannel.appendLine(`[System] Python execution timed out after ${pythonTimeoutSec}s. Re-initializing sandbox...`);
+
+                    // Re-initialize Pyodide to clear any stuck state
+                    pyodide = await loadPyodide();
+                    await bootstrapPyodide(pyodide);
+
+                    // Re-mount CoW filesystem if available
+                    if (apiClient) {
+                        const cowConfig = vscode.workspace.getConfiguration('spook');
+                        const excludeDirs = cowConfig.get<string[]>('excludeDirectories') || [];
+                        const excludePatterns = excludeDirs.map(dir => new RegExp(`(?:^|/)${dir}(?:/|$)`));
+                        const cowFS = createCoWBackend(pyodide.FS, apiClient, excludePatterns);
+                        try { pyodide.FS.mkdir('/workspace'); } catch { }
+                        pyodide.FS.mount(cowFS as any, {}, '/workspace');
+                    }
+
+                    const timeoutMsg = `[TIMEOUT ERROR]: Python execution exceeded ${pythonTimeoutSec}s and was terminated. The sandbox has been re-initialized. Your previous REPL variables are lost. Please avoid infinite loops and retry your approach.`;
+                    outputChannel.appendLine(timeoutMsg);
+                    messages.push({ role: 'user', content: timeoutMsg });
+
+                    if (config.postToWebview) {
+                        config.postToWebview({ command: 'receiveMessage', role: 'system', content: timeoutMsg });
+                    }
+                } else {
+                    const combinedOutput = `STDOUT:\n${stdout}\nSTDERR:\n${stderr}`;
+                    outputChannel.appendLine(`[Execution Result]:\n${combinedOutput}`);
+                    messages.push({ role: 'user', content: `Execution Output:\n${combinedOutput}` });
+
+                    if (config.postToWebview) {
+                        config.postToWebview({ command: 'receiveMessage', role: 'system', content: `[Execution Result]:\n${combinedOutput}` });
+                    }
                 }
             } catch (err: any) {
                 const isHandoff = err.message && err.message.includes("__HANDOFF__");

@@ -77,10 +77,10 @@ Task 3.3: Implement the User Approval UI (Diff View)
 Objective: Ensure no changes are saved without explicit user permission.
 Implementation: Before calling the commit function from Task 3.2, iterate through the dirty nodes and launch vscode.commands.executeCommand('vscode.diff', uri1, uri2, title) for each file. Use vscode.window.showInformationMessage("Accept Agent Changes?", "Approve", "Reject") to capture the final user decision.
 Phase 4: Error Handling & Context Window Management
-Task 4.1: Wrap Python Execution with a Timeout
+Task 4.1: Wrap Python Execution with a Timeout ✅ (implemented in feat/python-execution-timeout)
 
 Objective: Prevent infinite python loops from hanging the extension.
-Implementation: Wrap await pyodide.runPythonAsync(pythonCode) in 
+Implementation: Wrap await pyodide.runPythonAsync(pythonCode) in
 src/agent/rlm.ts
  with Promise.race() against a configurable timeout (e.g., 30 seconds). Upon timeout, forcefully terminate/re-initialize the Pyodide WebWorker to clear the freeze, and send a timeout error to the LLM.
 Task 4.2: Implement Sliding Context Window limits

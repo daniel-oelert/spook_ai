@@ -61,6 +61,13 @@
             "__pycache__"
           ],
           "description": "Directories to exclude from the CoW filesystem."
+        },
+        "spook.pythonExecutionTimeout": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "maximum": 300,
+          "description": "Timeout in seconds for Python code execution in the Pyodide sandbox. Prevents infinite loops from hanging the extension."
         }
       }
     }
